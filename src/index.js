@@ -1,7 +1,7 @@
+require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
-require('dotenv').config();
 
 const app = express();
 app.use(express.json());
@@ -21,13 +21,13 @@ const CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID;
 const CLIENT_SECRET = process.env.KEYCLOAK_CLIENT_SECRET;
 
 // Token verification endpoint
-app.get('/api/verify', async (req, res) => {
+app.get('/api/auth/verify', async (req, res) => {
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'No token provided' });
   }
-
+  
   const token = authHeader.split(' ')[1];
 
   try {
@@ -42,7 +42,6 @@ app.get('/api/verify', async (req, res) => {
         }
       }
     );
-    console.log('User info response:', userInfoResponse.data);
 
     if (!userInfoResponse.data) {
       return res.status(401).json({
@@ -54,7 +53,12 @@ app.get('/api/verify', async (req, res) => {
     return res.json({
       valid: true,
       user: {
-        ...userInfoResponse.data
+        firstName: userInfoResponse.data.given_name,
+        lastName: userInfoResponse.data.family_name,
+        email: userInfoResponse.data.email,
+        username: userInfoResponse.data.preferred_username,
+        sub: userInfoResponse.data.sub,
+        email_verified: userInfoResponse.data.email_verified,
       }
     });
   } catch (error) {
@@ -72,9 +76,9 @@ app.get('/api/verify', async (req, res) => {
   }
 });
 
-app.post('/api/token', async (req, res) => {  
+app.post('/api/auth/login', async (req, res) => {  
   const { username, password } = req.body;
-
+  console.log('Username:', username);
   if (!username || !password) {
     console.log('Missing credentials');
     return res.status(400).json({ error: 'Username and password are required' });
@@ -105,7 +109,6 @@ app.post('/api/token', async (req, res) => {
       }
     );
 
-    console.log('Token request successful');
     return res.json({
       access_token: response.data.access_token,
       refresh_token: response.data.refresh_token,
@@ -126,6 +129,105 @@ app.post('/api/token', async (req, res) => {
     return res.status(500).json({ 
       error: 'Authentication failed',
       details: error.response?.data || error.message
+    });
+  }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  const { firstName, username, lastName, password, email } = req.body;
+
+  if (!username || !email || !password) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+  try {
+    const tokenResponse = await axios.post(
+      `${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token`,
+      new URLSearchParams({
+        grant_type: 'password',
+        client_id: 'admin-cli',
+        username: process.env.KEYCLOAK_ADMIN_USERNAME,
+        password: process.env.KEYCLOAK_ADMIN_PASSWORD,
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      }
+    );
+
+    const adminToken = tokenResponse.data.access_token;
+
+    // Create user
+    const createUserResponse = await axios.post(
+      `${KEYCLOAK_URL}/admin/realms/${REALM}/users`,
+      {
+        enabled: true,
+        username,
+        email,
+        firstName,
+        lastName,
+        enabled: true,
+        emailVerified: true,
+        credentials: [
+          {
+            type: 'password',
+            value: password,
+            temporary: false,
+          },
+        ],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (createUserResponse.status === 201) {
+      return res.status(201).json({ message: 'User registered successfully' });
+    } else {
+      return res.status(createUserResponse.status).json({ error: 'Failed to register user' });
+    }
+  } catch (error) {
+    return res.status(500).json({ error: 'Registration failed' });
+  }
+})
+
+app.get('/api/auth/sessions/:userId', async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const tokenResponse = await axios.post(
+      `${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token`,
+      new URLSearchParams({
+        grant_type: 'password',
+        client_id: 'admin-cli',
+        username: process.env.KEYCLOAK_ADMIN_USERNAME,
+        password: process.env.KEYCLOAK_ADMIN_PASSWORD,
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      }
+    );
+    const adminToken = tokenResponse.data.access_token;
+
+    const sessionsResponse = await axios.get(
+      `${KEYCLOAK_URL}/admin/realms/${REALM}/users/${userId}/sessions`,
+      {
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+        },
+      }
+    );
+
+    return res.json({ sessions: sessionsResponse.data });
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Failed to get user sessions',
+      details: error.response?.data || error.message,
     });
   }
 });
