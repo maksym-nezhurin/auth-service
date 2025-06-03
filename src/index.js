@@ -15,7 +15,7 @@ app.use(cors({
 }));
 
 const PORT = process.env.PORT || 3001;
-const KEYCLOAK_URL = process.env.KEYCLOAK_SERVER_URL;
+const KEYCLOAK_URL = process.env.KEYCLOAK_URL;
 const REALM = process.env.KEYCLOAK_REALM_NAME;
 const CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID;
 const CLIENT_SECRET = process.env.KEYCLOAK_CLIENT_SECRET;
