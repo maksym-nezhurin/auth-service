@@ -1,0 +1,43 @@
+# fly.toml app configuration file generated for auth-service-still-silence-9406 on 2025-06-03T11:07:43+02:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'auth-service-still-silence-9406'
+primary_region = 'waw'
+
+[env]
+  NODE_ENV = "production"
+  KEYCLOAK_URL = "https://euc1.auth.ac/auth"
+  KEYCLOAK_REALM = "general-auth"
+  KEYCLOAK_CLIENT_ID = "api-client"
+  KEYCLOAK_CLIENT_SECRET = "XVLTtJKNr7GSqrSGMvAMGwv3PMfN0NqW"
+  PORT = "8080"
+
+[[services]]
+  internal_port = 3000
+  protocol = "tcp"
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
