@@ -8,7 +8,7 @@ app.use(express.json());
 
 // Enable CORS with specific configuration
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3004'],
+  origin: ['http://localhost:3000', 'https://gateway-dawn-wildflower-3519.fly.dev'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Access-Control-Allow-Origin']
@@ -19,6 +19,13 @@ const KEYCLOAK_URL = process.env.KEYCLOAK_SERVER_URL;
 const REALM = process.env.KEYCLOAK_REALM_NAME;
 const CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID;
 const CLIENT_SECRET = process.env.KEYCLOAK_CLIENT_SECRET;
+
+app.get('/api/auth', async (req, res) => {
+  return res.json({
+    status: 200,
+    message: 'Everything is good!'
+  })
+});
 
 // Token verification endpoint
 app.get('/api/auth/verify', async (req, res) => {
@@ -228,6 +235,45 @@ app.get('/api/auth/sessions/:userId', async (req, res) => {
     return res.status(500).json({
       error: 'Failed to get user sessions',
       details: error.response?.data || error.message,
+    });
+  }
+});
+
+app.post('/api/auth/refresh', async (req, res) => {
+  const { refresh_token } = req.body;
+  if (!refresh_token) {
+    return res.status(400).json({ error: 'Missing refresh_token' });
+  }
+  try {
+    const response = await axios.post(
+      `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`,
+      new URLSearchParams({
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        grant_type: 'refresh_token',
+        refresh_token,
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      }
+    );
+    return res.json({
+      access_token: response.data.access_token,
+      refresh_token: response.data.refresh_token,
+      expires_in: response.data.expires_in,
+      token_type: response.data.token_type,
+    });
+  } catch (error) {
+    console.error('Refresh token error:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    return res.status(401).json({
+      error: 'Failed to refresh token',
+      details: error.response?.data || error.message
     });
   }
 });
